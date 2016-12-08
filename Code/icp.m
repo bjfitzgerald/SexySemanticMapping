@@ -10,6 +10,12 @@ function [ P ] = icp( PC1, PC2, NItter, tol )
     if nargin < 4
        tol = 0.01;
     end
+
+    P = ransac_icp(PC1, PC2, NItter, tol);
+    
+end
+
+function [ P ] = p2p_icp(PC1, PC2, NItter, tol)
     Np1 = size(PC1, 1);
     Np2 = size(PC2, 1);
 
@@ -21,15 +27,33 @@ function [ P ] = icp( PC1, PC2, NItter, tol )
     for it = 1:NItter
         [Idx, MD] = KD.knnsearch(PC2);
         MIdx = [Idx, (1:numel(Idx))'];
+        size(MIdx)
+        
+        %% Reject dublicates
+        [~, IA, ~] = unique(Idx);
+        MIdx = MIdx(IA, :);
+        MD = MD(IA);
+        size(MIdx)
+        
+        %[MD, SIdx] = sort(MD);
+        %MIdx = MIdx(SIdx, :); % Sorted points matches
 
         %% Reject points that are too far apart
         MuDist = mean(MD)
-        sel = MD < MuDist/10;
+        sel = MD < MuDist;
         MIdx = MIdx(sel, :);
 
         PM1 = PC1(MIdx(:,1), :);    % Corresponding points from point cloud 1
         PM2 = PC2(MIdx(:,2), :);    % Corresponding points from point cloud 2    
         N = size(PM1, 1)
+        
+        figure,
+        pcshow(PM1,[1 0 0]); hold on;
+        pcshow(PM2,[0 0 1]);
+        drawnow;
+        title('Match');
+        hold off;
+        pause
         
         [R, T] = icp_step(PM1, PM2);
         %Apply rotation and tranlation
@@ -46,7 +70,55 @@ function [ P ] = icp( PC1, PC2, NItter, tol )
     end
 
     P = PC2;
+end
 
+function [ P ] = ransac_icp(PC1, PC2, NItter, tol)
+    Np1 = size(PC1, 1);
+    Np2 = size(PC2, 1);
+    
+    %% Find Nearest Neighbour
+    KD = KDTreeSearcher(PC1);
+    
+    for it = 1:NItter
+        [Idx, MD] = KD.knnsearch(PC2);
+        MIdx = [Idx, (1:numel(Idx))'];
+        %% Reject points that are too far apart
+        MuDist = mean(MD)
+        filt = MD < MuDist;
+        MIdx = MIdx(filt, :);        
+        
+        N1 = size(MIdx, 1);
+        N2 = 200;
+        
+        R_b = eye(3);
+        T_b = zeros(1,3);
+        E_b = inf;
+        
+        for k = 1:20
+            sel = randperm(N1, N2);
+            MIdx_k = MIdx(sel, :);
+
+            PM1 = PC1(MIdx_k(:,1), :);    % Corresponding points from point cloud 1
+            PM2 = PC2(MIdx_k(:,2), :);    % Corresponding points from point cloud 2    
+
+            [R, T] = icp_step(PM1, PM2);
+            %Apply rotation and tranlation
+            PM2 = ((R*PM2') + repmat(T', 1,N2))';
+            %Estimate error
+            err = sum(sum((PM1 - PM2).^2, 2));
+            %fprintf('Ransac: %i, Err: %1.5f\n', k, err);
+            if err < E_b
+               E_b = err;
+               R_b = R;
+               T_b = T;
+            end
+        end
+        
+        fprintf('Itter: %i, Err: %1.5f\n', it, E_b);
+        PC2 = ((R_b*PC2') + repmat(T_b', 1,Np2))';
+    end
+    
+    P = PC2;
 end
 
 function [R, T] = icp_step(P1, P2)
