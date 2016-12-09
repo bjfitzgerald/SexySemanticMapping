@@ -12,42 +12,42 @@ function [ P ] = icp( PC1, PC2, NItter, tol )
     end
 
     P = ransac_icp(PC1, PC2, NItter, tol);
+    %P = p2p_icp(PC1, PC2, NItter, tol);
     
 end
 
 function [ P ] = p2p_icp(PC1, PC2, NItter, tol)
-    Np1 = size(PC1, 1);
     Np2 = size(PC2, 1);
 
+    PC1_sub = mergePoints(PC1, PC1, 10);
+    PC2_sub = mergePoints(PC2, PC2, 10);
+    
     %% Find Nearest Neighbour
-    KD = KDTreeSearcher(PC1);
+    KD = KDTreeSearcher(PC1_sub);
     R = eye(3);
     T = zeros(1, 3);
     
     for it = 1:NItter
-        [Idx, MD] = KD.knnsearch(PC2);
+        [Idx, MD] = KD.knnsearch(PC2_sub);
         MIdx = [Idx, (1:numel(Idx))'];
-        size(MIdx)
         
         %% Reject dublicates
         [~, IA, ~] = unique(Idx);
         MIdx = MIdx(IA, :);
         MD = MD(IA);
-        size(MIdx)
         
         %[MD, SIdx] = sort(MD);
         %MIdx = MIdx(SIdx, :); % Sorted points matches
 
         %% Reject points that are too far apart
-        MuDist = mean(MD)
-        sel = MD < MuDist;
+        Sigma = std(MD);
+        sel = MD < 3.5*Sigma;
         MIdx = MIdx(sel, :);
 
-        PM1 = PC1(MIdx(:,1), :);    % Corresponding points from point cloud 1
-        PM2 = PC2(MIdx(:,2), :);    % Corresponding points from point cloud 2    
+        PM1 = PC1_sub(MIdx(:,1), :);    % Corresponding points from point cloud 1
+        PM2 = PC2_sub(MIdx(:,2), :);    % Corresponding points from point cloud 2    
         N = size(PM1, 1)
         
-        figure,
         pcshow(PM1,[1 0 0]); hold on;
         pcshow(PM2,[0 0 1]);
         drawnow;
@@ -60,13 +60,9 @@ function [ P ] = p2p_icp(PC1, PC2, NItter, tol)
         PM2 = ((R*PM2') + repmat(T', 1,N))';
         %Estimate error
         err = sum(sum((PM1 - PM2).^2, 2));
-        fprintf('Itter: %i, Err: %1.5f\n', it, err);
+        fprintf('Itter: %i, Err: %1.5f \n', it, err);
         
         PC2 = ((R*PC2') + repmat(T', 1,Np2))';
-        
-        if err <= tol
-           %break; 
-        end
     end
 
     P = PC2;
@@ -75,6 +71,7 @@ end
 function [ P ] = ransac_icp(PC1, PC2, NItter, tol)
     Np1 = size(PC1, 1);
     Np2 = size(PC2, 1);
+    %N = min([Np1, Np2, 2000]) %subsample size
     
     %% Find Nearest Neighbour
     KD = KDTreeSearcher(PC1);
@@ -82,40 +79,49 @@ function [ P ] = ransac_icp(PC1, PC2, NItter, tol)
     for it = 1:NItter
         [Idx, MD] = KD.knnsearch(PC2);
         MIdx = [Idx, (1:numel(Idx))'];
-        %% Reject points that are too far apart
-        MuDist = mean(MD)
-        filt = MD < MuDist;
-        MIdx = MIdx(filt, :);        
+
+        %% Reject dublicates
+        [~, IA, ~] = unique(Idx);
+        MIdx = MIdx(IA, :);
+        MD = MD(IA);
         
         N1 = size(MIdx, 1);
-        N2 = 200;
+        N2 = 400;
         
         R_b = eye(3);
         T_b = zeros(1,3);
-        E_b = inf;
+        E_b = 0;
         
-        for k = 1:20
+        for k = 1:50
             sel = randperm(N1, N2);
             MIdx_k = MIdx(sel, :);
 
             PM1 = PC1(MIdx_k(:,1), :);    % Corresponding points from point cloud 1
-            PM2 = PC2(MIdx_k(:,2), :);    % Corresponding points from point cloud 2    
-
+            PM2 = PC2(MIdx_k(:,2), :);    % Corresponding points from point cloud 2              
+            err1 = sum(sum((PM1 - PM2).^2, 2));
+            
             [R, T] = icp_step(PM1, PM2);
             %Apply rotation and tranlation
             PM2 = ((R*PM2') + repmat(T', 1,N2))';
+
             %Estimate error
-            err = sum(sum((PM1 - PM2).^2, 2));
+            err2 = sum(sum((PM1 - PM2).^2, 2));
             %fprintf('Ransac: %i, Err: %1.5f\n', k, err);
-            if err < E_b
-               E_b = err;
+            imp = err1-err2/err1;
+            
+            if imp > E_b
+               E_b = imp;
                R_b = R;
                T_b = T;
             end
         end
         
-        fprintf('Itter: %i, Err: %1.5f\n', it, E_b);
+        fprintf('Itter: %i, Err: %1.5f \n', it, err2/N2);
         PC2 = ((R_b*PC2') + repmat(T_b', 1,Np2))';
+        
+        if err2 < 400
+            break;
+        end
     end
     
     P = PC2;
