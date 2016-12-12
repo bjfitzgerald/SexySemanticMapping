@@ -1,4 +1,4 @@
-function [ P ] = icp( PC1, PC2, NItter, tol )
+function [ P, R, T ] = icp( PC1, PC2, NItter, tol )
     % Iterative Closest Point
     % PC1 is the destination point cloud
     % PC2 is the source point cloud that should be fitted to destination
@@ -11,123 +11,88 @@ function [ P ] = icp( PC1, PC2, NItter, tol )
        tol = 0.01;
     end
 
-    P = ransac_icp(PC1, PC2, NItter, tol);
+    P = PC2;
+    %P = ransac_icp(PC1, PC2, NItter, tol);
     %P = p2p_icp(PC1, PC2, NItter, tol);
+    
+    %P.Points = icp_useAll(PC1, PC2, NItter);
+    [P.Points, R, T] = icp_rejectDist(PC1, PC2, NItter);
     
 end
 
-function [ P ] = p2p_icp(PC1, PC2, NItter, tol)
-    Np2 = size(PC2, 1);
+%% ICP using every point
+function [ Pm, R, T ] = icp_useAll(PC1, PC2, NItter)
 
-    PC1_sub = mergePoints(PC1, PC1, 10);
-    PC2_sub = mergePoints(PC2, PC2, 10);
+Ps = PC2.Points;
+Pd = PC1.Points;
+Nd = PC1.Normals;
+
+m = size(Ps, 1);
+Pm = Ps;
+
+R = eye(3);
+T = zeros(1, 3);
+
+for it = 1:NItter
+	[Ri, Ti] = point2plane_step(Pm, Pd, Nd)
+   
+	Pm = ((Ri*Pm') + repmat(Ti', 1,m))';
     
-    %% Find Nearest Neighbour
-    KD = KDTreeSearcher(PC1_sub);
+    err = point2plane_error(Pm, Pd, Nd);
+    fprintf('Itter: %i, Err: %1.5f \n', it, err);
+    
+    R = R*Ri;
+    T = T+Ti;
+end
+
+end
+
+%% Point to Point
+function [ P, R, T ] = icp_rejectDist(PC1, PC2, NItter)
+    KD = KDTreeSearcher(PC1.Points);
+    
     R = eye(3);
     T = zeros(1, 3);
+    err_last = 0;
     
     for it = 1:NItter
-        [Idx, MD] = KD.knnsearch(PC2_sub);
+        [Idx, MD] = KD.knnsearch(PC2.Points);
         MIdx = [Idx, (1:numel(Idx))'];
-        
-        %% Reject dublicates
-        [~, IA, ~] = unique(Idx);
-        MIdx = MIdx(IA, :);
-        MD = MD(IA);
-        
-        %[MD, SIdx] = sort(MD);
-        %MIdx = MIdx(SIdx, :); % Sorted points matches
 
         %% Reject points that are too far apart
         Sigma = std(MD);
-        sel = MD < 3.5*Sigma;
+        sel = MD < 1.5*Sigma;
         MIdx = MIdx(sel, :);
 
-        PM1 = PC1_sub(MIdx(:,1), :);    % Corresponding points from point cloud 1
-        PM2 = PC2_sub(MIdx(:,2), :);    % Corresponding points from point cloud 2    
-        N = size(PM1, 1)
+        Pd = PC1.Points(MIdx(:,1), :);    % Corresponding points from point cloud 1
+        Nd = PC1.Normals(MIdx(:,1), :);
+        Ps = PC2.Points(MIdx(:,2), :);    % Corresponding points from point cloud 2    
+        N = size(Pd, 1);
         
-        pcshow(PM1,[1 0 0]); hold on;
-        pcshow(PM2,[0 0 1]);
-        drawnow;
-        title('Match');
-        hold off;
-        pause
-        
-        [R, T] = icp_step(PM1, PM2);
+        [Ri, Ti] = point2plane_step(Ps, Pd, Nd);
         %Apply rotation and tranlation
-        PM2 = ((R*PM2') + repmat(T', 1,N))';
+        Ps = ((Ri*Ps') + repmat(Ti', 1,N))';
         %Estimate error
-        err = sum(sum((PM1 - PM2).^2, 2));
+        err = point2plane_error(Ps, Pd, Nd);
         fprintf('Itter: %i, Err: %1.5f \n', it, err);
         
-        PC2 = ((R*PC2') + repmat(T', 1,Np2))';
+        PC2.Points = ((Ri*PC2.Points') + repmat(Ti', 1,size(PC2.Points,1)))';
+        
+        R = R*Ri;
+        T = T+Ti;
+        
+        if(abs(err-err_last) < 10^-2)
+           break; 
+        end
+        err_last = err;
     end
 
-    P = PC2;
+    P = PC2.Points;
 end
 
-function [ P ] = ransac_icp(PC1, PC2, NItter, tol)
-    Np1 = size(PC1, 1);
-    Np2 = size(PC2, 1);
-    %N = min([Np1, Np2, 2000]) %subsample size
-    
-    %% Find Nearest Neighbour
-    KD = KDTreeSearcher(PC1);
-    
-    for it = 1:NItter
-        [Idx, MD] = KD.knnsearch(PC2);
-        MIdx = [Idx, (1:numel(Idx))'];
 
-        %% Reject dublicates
-        [~, IA, ~] = unique(Idx);
-        MIdx = MIdx(IA, :);
-        MD = MD(IA);
-        
-        N1 = size(MIdx, 1);
-        N2 = 400;
-        
-        R_b = eye(3);
-        T_b = zeros(1,3);
-        E_b = 0;
-        
-        for k = 1:50
-            sel = randperm(N1, N2);
-            MIdx_k = MIdx(sel, :);
-
-            PM1 = PC1(MIdx_k(:,1), :);    % Corresponding points from point cloud 1
-            PM2 = PC2(MIdx_k(:,2), :);    % Corresponding points from point cloud 2              
-            err1 = sum(sum((PM1 - PM2).^2, 2));
-            
-            [R, T] = icp_step(PM1, PM2);
-            %Apply rotation and tranlation
-            PM2 = ((R*PM2') + repmat(T', 1,N2))';
-
-            %Estimate error
-            err2 = sum(sum((PM1 - PM2).^2, 2));
-            %fprintf('Ransac: %i, Err: %1.5f\n', k, err);
-            imp = err1-err2/err1;
-            
-            if imp > E_b
-               E_b = imp;
-               R_b = R;
-               T_b = T;
-            end
-        end
-        
-        fprintf('Itter: %i, Err: %1.5f \n', it, err2/N2);
-        PC2 = ((R_b*PC2') + repmat(T_b', 1,Np2))';
-        
-        if err2 < 400
-            break;
-        end
-    end
-    
-    P = PC2;
-end
-
-function [R, T] = icp_step(P1, P2)
+%% Point to Point step
+function [R, T] = point2point_step(P1, P2)
     Mu1 = mean(P1);
     Mu2 = mean(P2);
     Q1 = bsxfun(@minus, P1, Mu1);
@@ -137,5 +102,66 @@ function [R, T] = icp_step(P1, P2)
     [U, ~, V] = svd(H);
     R = V*diag([1 1 det(U*V')])*U';
     T = Mu1 - (R * Mu2')';
+
+end
+
+%% Point to Plain step
+function [R, T] = point2plane_step(Ps, Pd, Nd)
+% Ps = Source surface points
+% Pd = Destination surface points
+% Nd = Destination surface normals
+N = size(Ps, 1);
+
+b = zeros(6, 1);
+C = zeros(6, 6);
+
+for i = 1:N
+    p = Ps(i, :);
+    q = Pd(i, :);
+    n = Nd(i, :);
+    c = cross(p, n);
+   
+	C_i = [(c(1)*c(1)), (c(1)*c(2)), (c(1)*c(3)), (c(1)*n(1)), (c(1)*n(2)), (c(1)*n(3));...
+          (c(2)*c(1)), (c(2)*c(2)), (c(2)*c(3)), (c(2)*n(1)), (c(2)*n(2)), (c(2)*n(3));...
+          (c(3)*c(1)), (c(3)*c(2)), (c(3)*c(3)), (c(3)*n(1)), (c(3)*n(2)), (c(3)*n(3));...
+          (n(1)*c(1)), (n(1)*c(2)), (n(1)*c(3)), (n(1)*n(1)), (n(1)*n(2)), (n(1)*n(3));...
+          (n(2)*c(1)), (n(2)*c(2)), (n(2)*c(3)), (n(2)*n(1)), (n(2)*n(2)), (n(2)*n(3));...
+          (n(3)*c(1)), (n(3)*c(2)), (n(3)*c(3)), (n(3)*n(1)), (n(3)*n(2)), (n(3)*n(3))...
+       ];
+	C = C+C_i;
+    
+    d = dot(p-q, n);
+	b_i = [(c(1) * d);...
+          (c(2) * d);...
+          (c(3) * d);...
+          (n(1) * d);...
+          (n(2) * d);...
+          (n(3) * d)...
+    ];
+    b = b+b_i;
+end
+
+X = C\-b;
+rotX = vrrotvec2mat([1 0 0 X(1)]);
+rotY = vrrotvec2mat([0 1 0 X(2)]);
+rotZ = vrrotvec2mat([0 0 1 X(3)]);
+R = rotZ*rotY*rotX;
+T = X(4:6)';
+
+end
+
+function [ err ] = point2plane_error(Ps, Pd, Nd)
+
+N = size(Ps, 1);
+err = 0;
+
+for i = 1:N
+   p = Ps(i, :);
+   q = Pd(i, :);
+   n = Nd(i, :);
+   c = cross(p, n);
+   
+   err = err + (dot((p-q), n) + dot([0 0 0], n) + dot([0 0 0], c))^2;
+end
 
 end

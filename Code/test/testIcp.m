@@ -1,4 +1,6 @@
 
+addpath('../');
+
 N = 20;
 noise_sigma = 0.01;
 alpha = deg2rad(0);

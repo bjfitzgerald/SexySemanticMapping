@@ -1,10 +1,8 @@
-function [ RGB, D ] = readRgbd( scene, frame )
-%retuns a 4 channel image red, green, blue and depth
+function [ PC ] = getPointCloud( scene, frame )
 
 %% Setup Paths and Read RGB and Depth Images
 Path = '../Data/SingleObject/'; 
-SceneNum = scene;
-SceneName = sprintf('%0.3d', SceneNum);
+SceneName = sprintf('%0.3d', scene);
 FrameNum = num2str(frame);
 
 I = imread([Path,'scene_',SceneName,'/frames/frame_',FrameNum,'_rgb.png']);
@@ -15,6 +13,12 @@ ID = double(ID);
 RGB = I;
 D = ID;
 
+[pcx, pcy, pcz, r, g, b, ~, ~, ~,~] = depthToCloud_full_RGB(D, RGB, './params/calib_xtion.mat');
+
+P = [pcx pcy pcz];
+C = [r, g, b];
+
+PC = struct('Points', P, 'Colors', C);
 
 end
 
