@@ -2,6 +2,7 @@ addpath('../');
 
 m = 500; % Number of points to use
 
+%{
 % N random points
 P = rand(m, 3);
 P = bsxfun(@minus, P, [0.5 0.5 0]);
@@ -10,14 +11,18 @@ P = bsxfun(@minus, P, [0.5 0.5 0]);
 Pn = sqrt(sum(P.^2, 2));
 P = P./repmat(Pn, [1, 3]);
 P = P .* 10;
+%}
 
+PC = getPointCloud(6, 100);
+[~, PC] = subSample(PC, 2000);
+P = PC.Points;
+
+tic;
 Norm = pcNormals(P);
+toc;
 
 % Draw points
 scatter3(P(:, 1), P(:, 2), P(:, 3), 50, Norm, '.'); hold on;
-%xlim([-1, 1]);
-%ylim([-1, 1]);
-%zlim([-1, 1]);
 
 % Draw normals
 for i = 1:m
