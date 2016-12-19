@@ -28,6 +28,7 @@ for i = 1:itt
     n = cross(P(1,:)-P(2,:), P(1,:)-P(3,:));
     n = n/norm(n); % normalized plane normal
     p = P(1,:); % one point on the plane
+    n = n * sign(-dot(n, p)); % fix direction of normal
     
     % Find all points on this plane
     for k = 1:m

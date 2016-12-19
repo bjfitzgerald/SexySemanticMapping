@@ -1,4 +1,4 @@
-function [ Norm ] = pcNormals( P, k, v )
+function [ Norm ] = pcNormals( P, k )
 % Given a set of points P, this will return a set of Estimated surface
 % normals Norm
 
@@ -17,13 +17,14 @@ Norm = zeros(m, 3);
 
 for i = 1:m
    idx = Pk_idx(i, :);
+   p = P(i, :);
    K = P(idx', :); % Neighborhood points
    
    M = cov(K);
    [V, ~] = eig(M);
    norm_i = V(:, 1)';
    norm_i = norm_i/norm(norm_i);
-   norm_i = norm_i * sign(-dot(norm_i, v));
+   norm_i = norm_i * sign(-dot(norm_i, p));
    
    Norm(i, :) = norm_i;
 end

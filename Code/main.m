@@ -1,65 +1,61 @@
 
-scene = 6;
-%frames = [1, 50, 100, 150, 200, 250, 300, 350, 400, 414];
-%frames = [1, 25, 50, 75, 100, 120];
-%frames = [50, 150, 250, 350];
-frames = [1, 120, 220, 300, 390];
 
-if ~exist('PC', 'var')
-%% Collect point clouds
-PC = cell(1, numel(frames));
-for i = 1:numel(frames)
-    fprintf('Frame: %i \n', frames(i));
-    PC_i = getPointCloud(scene, frames(i));
-    %PC_i = pcNormalize(PC_i);
-    PC_i = pcTrim(PC_i, 270);
-    [~, PC_i] = subSample(PC_i, 20000 );
-    
-    % Remove plane
-    while (1)
-        PIdx = findPlane(PC_i, 100, 10 );
-        if size(PIdx, 1) < 3000
-           break; 
-        end
-        fprintf('Remove %i points \n', size(PIdx, 1));
-        PC_i.Points(PIdx, :) = [];
-        PC_i.Colors(PIdx, :) = [];%repmat([1, 0, 0], [size(PIdx,1), 1]);
-    end
-    
-    PC_i = pcDenoise(PC_i, 20, 3);
-    PC_i.Normals = pcNormals(PC_i.Points, 4, PC_i.Points(1,:)); 
-    [~, PC_i] = subSample(PC_i, 4000, 20, 'normal');
-    
-    % Center model
-    mu = mean(PC_i.Points);
-    PC_i.Points = bsxfun(@minus, PC_i.Points, mu);
-    
-    %figure,
-    %pcshow(PC_i.Points,PC_i.Colors);
-    %drawnow;
-    %title(['Frame ', int2str(frames(i))]);
-    
-    PC{i} = PC_i;
-end
+s8 = 0; %skip scene 8
+s12 = 0;
+
+s35 = 0; %skip scene 35
+%s44 = 0; %skip scene 44
+
+path_single = '../Data/SingleObject/';
+path_multi = '../Data/MultipleObjects/';
+
+%% Hat
+if ~exist('s6', 'var')
+    scene = 6;
+    frames = [1, 120, 220, 300, 390];
+    PC = extractObjects(scene, frames, path_single);
+    s6 = struct('Label', 'Hat', 'Model', PC);
+    save('objLib/s6.mat', 's6');
+    drawModel(s6.Model, s6.Label);
 end
 
-%% Build Model
-PC_main = PC{1};
-for i = 2:numel(PC)
-    PC_d = PC{i};
-    
-    [PC_s, R_i, T_i] = icp(PC_d, PC_main, 100 );
-    
-    P_i = [PC_s.Points; PC_d.Points];
-    C_i = [PC_s.Colors; PC_d.Colors];
-    
-    PC_main = struct('Points', P_i, 'Colors', C_i);
+%% Pringles
+if ~exist('s8', 'var')
+    scene = 8;
+    frames = [1, 120, 220, 350, 460];
+    PC = extractObjects(scene, frames, path_single);
+    s8 = struct('Label', 'Pringles', 'Model', PC);
+    save('objLib/s8.mat', 's8');
+    drawModel(s8);
 end
 
-PC_main = pcDenoise(PC_main, 50, 3);
+%% Penguin
+if ~exist('s12', 'var')
+    scene = 12;
+    frames = [1, 90, 180, 170, 372];
+    PC = extractObjects(scene, frames, path_single);
+    s12 = struct('Label', 'Penguin', 'Model', PC);
+    save('objLib/s12.mat', 's12');
+    drawModel(s12);
+end
 
-%% Draw model
-figure,
-pcshow(PC_main.Points,PC_main.Colors);
-drawnow;
-title('Merged Model 1');
+
+%% Scene 35
+if ~exist('s35', 'var')
+    scene = 35;
+    frames = [1, 50, 100]; %, 330, 468
+    PC = extractObjects(scene, frames, path_multi);
+    s35 = struct('Label', 'Scene 35', 'Model', PC);
+    save('sceneLib/s35.mat', 's35');
+    drawModel(s35);
+end
+
+%% Scene 44
+if ~exist('s44', 'var')
+    scene = 44;
+    frames = [1, 110, 220, 330, 440, 556];
+    PC = extractObjects(scene, frames, path_multi);
+    s44 = struct('Label', 'Multi 44', 'Model', PC);
+    save('sceneLib/s44.mat', 's44');
+    drawModel(s44.Model, 'Scene 44');
+end

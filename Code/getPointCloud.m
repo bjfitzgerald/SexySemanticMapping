@@ -20,11 +20,7 @@ D = ID;
 P = [pcx pcy pcz];
 C = [r, g, b];
 
-maxCoord = max(P);
-minCoord = min(P);
-d = max(maxCoord-minCoord);
-
-PC = struct('Points', P, 'Colors', C, 'Width', d);
+PC = struct('Points', P, 'Colors', C);
 
 end
 
