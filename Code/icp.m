@@ -1,4 +1,4 @@
-function [ P, R, T ] = icp( PC1, PC2, NItter, tol )
+function [ P, R, T ] = icp( PC1, PC2, NItter )
     % Iterative Closest Point
     % PC1 is the destination point cloud
     % PC2 is the source point cloud that should be fitted to destination
@@ -15,8 +15,8 @@ function [ P, R, T ] = icp( PC1, PC2, NItter, tol )
     %P = ransac_icp(PC1, PC2, NItter, tol);
     %P = p2p_icp(PC1, PC2, NItter, tol);
     
-    %P.Points = icp_useAll(PC1, PC2, NItter);
     [P.Points, R, T] = icp_rejectDist(PC1, PC2, NItter);
+    %[P.Points, R, T] = icp_useAll(PC1, PC2, NItter);
     
 end
 
@@ -34,8 +34,16 @@ R = eye(3);
 T = zeros(1, 3);
 
 for it = 1:NItter
-	[Ri, Ti] = point2plane_step(Pm, Pd, Nd)
+	[Ri, Ti] = point2plane_step(Pm, Pd, Nd);
    
+    %{
+    % display corresponding points
+    scatter3(Pd(:, 1), Pd(:, 2), Pd(:, 3), '.', 'blue'); hold on;
+    scatter3(Pm(:, 1), Pm(:, 2), Pm(:, 3), '.', 'red');
+    hold off;
+    pause    
+    %}
+    
 	Pm = ((Ri*Pm') + repmat(Ti', 1,m))';
     
     err = point2plane_error(Pm, Pd, Nd);
@@ -54,6 +62,7 @@ function [ P, R, T ] = icp_rejectDist(PC1, PC2, NItter)
     R = eye(3);
     T = zeros(1, 3);
     err_last = 0;
+    err_last2 = 0;
     
     for it = 1:NItter
         [Idx, MD] = KD.knnsearch(PC2.Points);
@@ -61,13 +70,22 @@ function [ P, R, T ] = icp_rejectDist(PC1, PC2, NItter)
 
         %% Reject points that are too far apart
         Sigma = std(MD);
-        sel = MD < 1.5*Sigma;
+        sel = MD < 1*Sigma;
         MIdx = MIdx(sel, :);
 
         Pd = PC1.Points(MIdx(:,1), :);    % Corresponding points from point cloud 1
         Nd = PC1.Normals(MIdx(:,1), :);
         Ps = PC2.Points(MIdx(:,2), :);    % Corresponding points from point cloud 2    
         N = size(Pd, 1);
+        
+        %{
+        % display corresponding points
+        scatter3(Pd(:, 1), Pd(:, 2), Pd(:, 3), '.', 'blue'); hold on;
+        scatter3(Ps(:, 1), Ps(:, 2), Ps(:, 3), '.', 'red');
+        hold off;
+        pause
+        %}
+        
         
         [Ri, Ti] = point2plane_step(Ps, Pd, Nd);
         %Apply rotation and tranlation
@@ -81,9 +99,13 @@ function [ P, R, T ] = icp_rejectDist(PC1, PC2, NItter)
         R = R*Ri;
         T = T+Ti;
         
-        if(abs(err-err_last) < 10^-2)
+        if(abs(err-err_last) < 10^-5)
            break; 
         end
+        if(abs(err-err_last2) < 10^-5) % avoid getting stuck in loop
+           break; 
+        end        
+        err_last2 = err_last;
         err_last = err;
     end
 
@@ -105,7 +127,7 @@ function [R, T] = point2point_step(P1, P2)
 
 end
 
-%% Point to Plain step
+%% Point to Plane step
 function [R, T] = point2plane_step(Ps, Pd, Nd)
 % Ps = Source surface points
 % Pd = Destination surface points

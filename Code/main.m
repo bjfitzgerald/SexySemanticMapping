@@ -1,51 +1,65 @@
 
 scene = 6;
 %frames = [1, 50, 100, 150, 200, 250, 300, 350, 400, 414];
-frames = [1, 25, 50, 75, 100, 120];
+%frames = [1, 25, 50, 75, 100, 120];
+%frames = [50, 150, 250, 350];
+frames = [1, 120, 220, 300, 390];
 
+if ~exist('PC', 'var')
 %% Collect point clouds
 PC = cell(1, numel(frames));
 for i = 1:numel(frames)
     fprintf('Frame: %i \n', frames(i));
     PC_i = getPointCloud(scene, frames(i));
-    [~, PC_i] = subSample(PC_i, 4000);
+    %PC_i = pcNormalize(PC_i);
+    PC_i = pcTrim(PC_i, 270);
+    [~, PC_i] = subSample(PC_i, 20000 );
+    
+    % Remove plane
+    while (1)
+        PIdx = findPlane(PC_i, 100, 10 );
+        if size(PIdx, 1) < 3000
+           break; 
+        end
+        fprintf('Remove %i points \n', size(PIdx, 1));
+        PC_i.Points(PIdx, :) = [];
+        PC_i.Colors(PIdx, :) = [];%repmat([1, 0, 0], [size(PIdx,1), 1]);
+    end
+    
+    PC_i = pcDenoise(PC_i, 20, 3);
     PC_i.Normals = pcNormals(PC_i.Points, 4, PC_i.Points(1,:)); 
+    [~, PC_i] = subSample(PC_i, 4000, 20, 'normal');
+    
+    % Center model
+    mu = mean(PC_i.Points);
+    PC_i.Points = bsxfun(@minus, PC_i.Points, mu);
+    
+    %figure,
+    %pcshow(PC_i.Points,PC_i.Colors);
+    %drawnow;
+    %title(['Frame ', int2str(frames(i))]);
     
     PC{i} = PC_i;
 end
-
-%% Collect transformations
-R = cell(1, numel(frames)); R{1} = eye(3);
-T = cell(1, numel(frames)); T{1} = zeros(1, 3);
-for i = 1:numel(PC)-1
-    
-    PC_a = PC{i};
-    PC_b = PC{i+1};
-    
-    [~, R_i, T_i] = icp(PC_a, PC_b, 100, 4000);
-    R{i+1} = R_i * R{i};
-    T{i+1} = T_i + T{i};
 end
 
 %% Build Model
-P = []; % Points of the final model
-C = []; % Color of the final model
-for i = 1:numel(R)
-    R_i = R{i};
-    T_i = T{i};
+PC_main = PC{1};
+for i = 2:numel(PC)
+    PC_d = PC{i};
     
-    P_i = PC{i}.Points;
-    C_i = PC{i}.Colors;
-    m = size(P_i, 1);
+    [PC_s, R_i, T_i] = icp(PC_d, PC_main, 100 );
     
-    P_i = ((R_i*P_i') + repmat(T_i', 1,m))';
+    P_i = [PC_s.Points; PC_d.Points];
+    C_i = [PC_s.Colors; PC_d.Colors];
     
-    P = [P;P_i];
-    C = [C;C_i];
+    PC_main = struct('Points', P_i, 'Colors', C_i);
 end
+
+PC_main = pcDenoise(PC_main, 50, 3);
 
 %% Draw model
 figure,
-pcshow(P,C);
+pcshow(PC_main.Points,PC_main.Colors);
 drawnow;
-title('Merged Model');
+title('Merged Model 1');

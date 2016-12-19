@@ -1,7 +1,9 @@
-function [ PC ] = getPointCloud( scene, frame )
+function [ PC ] = getPointCloud( scene, frame, Path )
 
 %% Setup Paths and Read RGB and Depth Images
-Path = '../Data/SingleObject/'; 
+if nargin < 3
+    Path = '../Data/SingleObject/'; 
+end
 SceneName = sprintf('%0.3d', scene);
 FrameNum = num2str(frame);
 
@@ -18,7 +20,11 @@ D = ID;
 P = [pcx pcy pcz];
 C = [r, g, b];
 
-PC = struct('Points', P, 'Colors', C);
+maxCoord = max(P);
+minCoord = min(P);
+d = max(maxCoord-minCoord);
+
+PC = struct('Points', P, 'Colors', C, 'Width', d);
 
 end
 

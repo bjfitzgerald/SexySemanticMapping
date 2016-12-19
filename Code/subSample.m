@@ -1,17 +1,29 @@
-function [ SI, PC_ ] = subSample( PC, N )
+function [ SI, PC_ ] = subSample( PC, N, k, type )
+
+if nargin < 4
+   type  = 'point';
+end
+if nargin < 3
+   k = 10;
+end
 
 SI = zeros(N, 1);
 
 nPts = size(PC.Points, 1);
-nCluster = 10;
-nSample = N/nCluster;
+nSample = N/k;
 
-CIdx = kmeans(PC.Points, nCluster);
+if strcmp(type, 'point')
+    CIdx = kmeans(PC.Points, k, 'Distance', 'sqeuclidean');
+elseif strcmp(type, 'normal')
+    CIdx = kmeans(PC.Normals, k, 'Distance', 'cosine');
+else
+    error('Unknown subsample method. Use "point" or "normal"');
+end
 PIdx = (1:nPts)';
 
 i_start = 0;
 i_end = 0;
-for i = 1:nCluster
+for i = 1:k
     I_i = PIdx((CIdx==i));
     n_i = size(I_i, 1);
     n_s = min(n_i, nSample);

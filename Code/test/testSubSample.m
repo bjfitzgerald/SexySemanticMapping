@@ -1,19 +1,31 @@
 
 addpath('../');
-
-[rgb1, d1] = readRgbd(6, 100);
-[MP, MC] = getPoints(rgb1, d1);
-
-figure,
-pcshow(MP,MC);
-drawnow;
-title('Full Sample');
-
+PC = getPointCloud(6, 100);
+fprintf('Get normals ');
 tic;
-SI = subSample(MP, 3000);
+PC.Normals = pcNormals(PC.Points, 4, PC.Points(1,:));
 toc;
 
 figure,
-pcshow(MP(SI, :), MC(SI, :));
+pcshow(PC.Points,PC.Colors);
 drawnow;
-title('Sub Sample');
+title('Full Sample');
+
+fprintf('Point subsample ');
+tic;
+[SIp, PCsubp] = subSample(PC, 4000);
+toc;
+
+fprintf('Normal subsample ');
+tic;
+[SIn, PCsubn] = subSample(PC, 4000);
+toc;
+
+figure,
+pcshow(PCsubp.Points, PCsubp.Colors);
+drawnow;
+title('Point subsample');
+figure,
+pcshow(PCsubn.Points, PCsubn.Colors);
+drawnow;
+title('Normal subsample');
