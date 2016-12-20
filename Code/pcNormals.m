@@ -1,12 +1,9 @@
-function [ Norm ] = pcNormals( P, k )
+function [ Norm ] = pcNormals( P, k, v )
 % Given a set of points P, this will return a set of Estimated surface
 % normals Norm
 
 if nargin < 2
     k = 5;
-end
-if nargin < 3
-    v = [0 0 -1];
 end
 
 m = size(P, 1);
@@ -20,11 +17,15 @@ for i = 1:m
    p = P(i, :);
    K = P(idx', :); % Neighborhood points
    
+	if nargin < 3
+        v = p;
+    end
+   
    M = cov(K);
    [V, ~] = eig(M);
    norm_i = V(:, 1)';
    norm_i = norm_i/norm(norm_i);
-   norm_i = norm_i * sign(-dot(norm_i, p));
+   norm_i = norm_i * -sign(dot(norm_i, v));
    
    Norm(i, :) = norm_i;
 end

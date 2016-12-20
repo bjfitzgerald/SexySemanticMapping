@@ -1,4 +1,11 @@
-function [ Obj_pc ] = extractObjects( scene, frames, path )
+function [ Obj_pc ] = extractObjects( scene, frames, path, trimRadius, planeThreshold )
+
+if nargin < 4
+    trimRadius = 300;    
+end
+if nargin < 5
+    planeThreshold = 2000;
+end
 
 %% Collect point clouds
 PC = cell(1, numel(frames));
@@ -6,16 +13,15 @@ UP = zeros(numel(frames), 3);
 for i = 1:numel(frames)
     fprintf('Frame: %i \n', frames(i));
     PC_i = getPointCloud(scene, frames(i), path);
-    PC_i = pcTrim(PC_i, 400);
+    PC_i = pcTrim(PC_i, trimRadius);
     [~, PC_i] = subSample(PC_i, 20000 );
-    
     
     %Find and remove plane
     largestPlane = 0;
     while (1)
-        [PIdx, N] = findPlane(PC_i, 100, 10 );
+        [PIdx, N] = findPlane(PC_i, 150, 10 );
         np_plane = size(PIdx, 1);
-        if np_plane < 2000 % threshold for plane removal
+        if np_plane < planeThreshold % threshold for plane removal
            break; 
         end
         if np_plane > largestPlane
@@ -26,11 +32,10 @@ for i = 1:numel(frames)
         PC_i.Points(PIdx, :) = [];
         PC_i.Colors(PIdx, :) = [];%repmat([1, 0, 0], [size(PIdx,1), 1]);
     end
-    
-    
+        
     % remove noise
     PC_i = pcDenoise(PC_i, 20, 3);
-    PC_i.Normals = pcNormals(PC_i.Points, 4); 
+    PC_i.Normals = pcNormals(PC_i.Points, 50);
     [~, PC_i] = subSample(PC_i, 4000, 20, 'normal');
     
     % Center model
@@ -63,7 +68,7 @@ up = [0 1 0];
 axis = cross(up, sceneUp);
 angle = acos(dot(up, sceneUp));
 R_up = vrrotvec2mat([axis angle]);
-Obj_pc.Points = (R_up*Obj_pc.Points')';
+Obj_pc = pcTransform(Obj_pc, R_up, [0 0 0]);
 
 end
 

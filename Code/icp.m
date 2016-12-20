@@ -95,7 +95,8 @@ function [ P, R, T ] = icp_rejectDist(PC1, PC2, NItter)
         err = point2plane_error(Ps, Pd, Nd);
         %fprintf('Itter: %i, Err: %1.5f \n', it, err);
         
-        PC2.Points = ((Ri*PC2.Points') + repmat(Ti', 1,size(PC2.Points,1)))';
+        %PC2.Points = ((Ri*PC2.Points') + repmat(Ti', 1,size(PC2.Points,1)))';
+        PC2 = pcTransform(PC2, Ri, Ti);
         
         R = R*Ri;
         T = T+Ti;
