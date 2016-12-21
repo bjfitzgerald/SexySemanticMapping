@@ -462,8 +462,9 @@ The direction of the normal is ubiquitous so in order to get consistent normal d
 Working with point clouds containing hundreds of thousands of points at full resolution can be extremely slow and offers little benefit. To speed up the processing we subsample the model and reduce it to only a few thousand points before running ICP. There are multiple ways to perform point cloud sub sampling, in this implementation we 
 
 
-\section{3D Object Recognition}
-Given a scene containing one of more objects, we would like to recognize what those object are and where they are. 
+\section{Point Cloud Segmentation}
+
+In the previous sections we consider segmenting under the assumption that there is a a single object sitting on a table. That acts as our training data that we use to collect object models. Now we consider the problem of segmenting a scene containing multiple objects where the number of objects in unknown. We still use the same method to remove the background and table but need to intoduce a new
 
 
 % An example of a floating figure using the graphicx package.
