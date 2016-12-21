@@ -78,6 +78,7 @@ function [ P, R, T ] = icp_rejectDist(PC1, PC2, NItter)
         Ps = PC2.Points(MIdx(:,2), :);    % Corresponding points from point cloud 2    
         N = size(Pd, 1);
         
+        
         %{
         % display corresponding points
         scatter3(Pd(:, 1), Pd(:, 2), Pd(:, 3), '.', 'blue'); hold on;
@@ -92,9 +93,10 @@ function [ P, R, T ] = icp_rejectDist(PC1, PC2, NItter)
         Ps = ((Ri*Ps') + repmat(Ti', 1,N))';
         %Estimate error
         err = point2plane_error(Ps, Pd, Nd);
-        fprintf('Itter: %i, Err: %1.5f \n', it, err);
+        %fprintf('Itter: %i, Err: %1.5f \n', it, err);
         
-        PC2.Points = ((Ri*PC2.Points') + repmat(Ti', 1,size(PC2.Points,1)))';
+        %PC2.Points = ((Ri*PC2.Points') + repmat(Ti', 1,size(PC2.Points,1)))';
+        PC2 = pcTransform(PC2, Ri, Ti);
         
         R = R*Ri;
         T = T+Ti;
@@ -108,7 +110,7 @@ function [ P, R, T ] = icp_rejectDist(PC1, PC2, NItter)
         err_last2 = err_last;
         err_last = err;
     end
-
+    fprintf('ICP err: %1.5f \n', err);
     P = PC2.Points;
 end
 
