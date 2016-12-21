@@ -322,14 +322,14 @@
 % not capitalized unless they are the first or last word of the title.
 % Linebreaks \\ can be used within to get better formatting as desired.
 % Do not put math or special symbols in the title.
-\title{Building a semantic map of a 3D scene}
+\title{Point Cloud Segmentation}
 
 
 % author names and affiliations
 % use a multiple column layout for up to three different
 % affiliations
 \author{
-\IEEEauthorblockN{Brian Fitzgerald}
+\IEEEauthorblockN{Brian James Fitzgerald}
 \IEEEauthorblockA{School of Computer Science\\
 University of Maryland\\
 bjfitzgerald13@gmail.com}
@@ -377,13 +377,12 @@ scene.
 
 
 \section{Introduction}
-Recognizing objects in a 3D dataset is useful for many things.
-
+Recognizing objects in a 3D dataset is useful for many things, such as robotics, augmented reality and more.
 For this implementation we assume that the objects of interest are placed on a flat table surface and are located roughly in the center of the frame. We believe this is not an unreasonable assumption since it holds in many practical use cases, for example, robot manipulators at a conveyor belt.
 
 The pipeline goes roughly as follows: first a point cloud is obtained from RGB-D images. The background and table are removed to isolate the object of interest, this is repeated for multiple views of the object. Next an object model is constructed by merging the different views using iterative closest point (ICP). 
 
-\section{3D Object Segmentation}
+\section{Single Object Segmentation}
 
 \subsection{Background Removal}
 The background is everything except the object of interest. 
@@ -396,17 +395,20 @@ Despite our best efforts to remove the table and background some noise is likely
 
 \begin{figure}
   \centering
-    \includegraphics[width=\linewidth]{img/hat1}
-    \caption{Capturing the region of interest using a hand drawn polygon}
-    \label{fig_roi1}
+    \includegraphics[width=\linewidth]{img/segmented2}
+    \caption{Example of a single segmented object. The table and background has been removed}
+    \label{fig:bear}
 \end{figure}
 
 \subsection{Iterative Closest Point}
 ICP is an iterative algorithm that given two corresponding point sets will find a translation and rotation that minimizes the distance between corresponding points. For this implementation we use a variation of ICP that minimizes the distance of each point to a corresponding plane. This variation converges much faster. 
 
+The error of alignment for two sets of points $p_i$ and $q_i$ with normals $n_i$ is defined as:
 \[
 E = \sum_{i=1}^{m}{[(p_i-q_i) \cdot n_i + t \cdot n_i + r \cdot c_i ]}^2 
 \]
+
+The rotation and translation that minimizes the error can be found by solving the system of equations $Cx = b$, where
 
 \[
 C = \sum_{i=1}^{m}{
@@ -441,6 +443,9 @@ b = \sum_{i=1}^{m}{
   \end{bmatrix}
 }
 \]
+We define $c = p \times n$. $t$ is the translation and $\alpha, \beta, \gamma$ is the rotation around the $x, y, z$ axis.
+
+\subsection{Estimating Surface Normals}
 
 For point to plane ICP to work we need to estimate the normal of each point on the model. Normal estimation is done by fitting a plane through a small region of points and getting the normal of that plane. For each point we find the $k$ closest neighbors, since these points are highly unlikely to be precisely co-planar we need to fit a plane in a least squares sense. To do this we form a matrix $K$ out of the $k$ points.
 
@@ -458,13 +463,65 @@ To find the normal at each point we perform and eigenvalue decomposition of the 
 
 The direction of the normal is ubiquitous so in order to get consistent normal directions across the model surface we need some additional information. For a point cloud obtained by a depth camera we know that the normal should not be facing away from the camera. Assuming the camera is located at the origin we can treat the point coordinates as the view direction. For normal $n$ at point $p$, $n$ faces the camera if $n \cdot p < 0$, otherwise we flip the direction of $n$. 
 
+\begin{figure}
+  \centering
+    \includegraphics[width=\linewidth]{img/normals2}
+    \caption{A point cloud model draw using the normal values as color}
+    \label{fig:normals}
+\end{figure}
+
 \subsection{Model Sub-Sampling}
 Working with point clouds containing hundreds of thousands of points at full resolution can be extremely slow and offers little benefit. To speed up the processing we subsample the model and reduce it to only a few thousand points before running ICP. There are multiple ways to perform point cloud sub sampling, in this implementation we 
 
 
-\section{Point Cloud Segmentation}
+\section{Multi Object Segmentation}
 
-In the previous sections we consider segmenting under the assumption that there is a a single object sitting on a table. That acts as our training data that we use to collect object models. Now we consider the problem of segmenting a scene containing multiple objects where the number of objects in unknown. We still use the same method to remove the background and table but need to intoduce a new
+In the previous sections we consider segmenting under the assumption that there is a a single object sitting on a table. That acts as our training data that we use to collect object models. Now we consider the problem of segmenting a scene containing multiple objects where the number of objects in unknown. We still use the same method to remove the background and table but need to introduce a new method to separate the objects. 
+
+\subsection{Graph Flooding}
+
+To label objects we treat the point cloud as a graph where voxels are nodes and are connected by an edge if they are within a small radius. Each edge is given a weight that represents the probability that the edge crosses an object boundary. The algorithm picks a point at random that has not been labeled yet and assigns a new label to it. For every edge to that node that has a weight lower than a threshold, the label is propagated along the edges to neighboring nodes. This is repeated in a breadth first pattern until we run out of unlabeled nodes or all reachable edges have a weight above the threshold.
+
+\subsection{Edge Weights}
+
+The quality of the object labeling is depended on the edge weights. In this implementation we tried two methods, cosine distance between normals and local convexity.
+
+\paragraph{Cosine Distance}
+\label{par:cosineDist}
+
+Using the cosine distance between normals for edge weights will in many cases correctly label boundaries but will also add many extra boundaries. It captures areas with similar normals but does not wrap around the full object. Figure \ref{fig:cosineDist} shows an example of labeling a point cloud using the cosine distance edge weights.
+
+\begin{figure}
+  \centering
+    \includegraphics[width=\linewidth]{img/multiSegment2}
+    \caption{Point cloud labeled using normal cosine distance for edge weights}
+    \label{fig:cosineDist}
+\end{figure}
+
+
+\paragraph{Local Convexity}
+\label{par:convexity}
+
+The convexity metric is based on the observation that concave corners are frequently parts of an object boundary while convex corners unlikely to boundaries\cite{convexity}\cite{object}.
+
+The weight $w$ between two points $p_i, p_j$ with normals $n_i, n_j$
+
+\[
+w_{ij}
+\begin{cases}
+    (1 - n_i \cdot n_j)^2 & \text{if } (p_j - p_i) \cdot n_j > 0 \\
+    1 - n_i \cdot n_j     & \text{otherwise}
+\end{cases}
+\]
+
+Figure \ref{fig:concaveHeat} shows the distribution of the concavity magnitude across a point cloud model. The magnitude is greatest on concave corners but due to noise in the normals and points on this model flat regions also light up. Some regions that we would like mark as a boundary do not light up.
+
+\begin{figure}
+  \centering
+    \includegraphics[width=\linewidth]{img/concaveHeat}
+    \caption{Heat map showing the concavity metric on a model}
+    \label{fig:concaveHeat}
+\end{figure}
 
 
 % An example of a floating figure using the graphicx package.
@@ -566,25 +623,6 @@ In the previous sections we consider segmenting under the assumption that there 
 
 
 
-\section{Conclusion}
-The conclusion goes here.
-
-
-
-
-% conference papers do not normally have an appendix
-
-
-% use section* for acknowledgment
-\section*{Acknowledgment}
-
-
-The authors would like to thank...
-
-
-
-
-
 % trigger a \newpage just before the given reference
 % number - used to balance the columns on the last page
 % adjust value as needed - may need to be readjusted if
@@ -609,9 +647,13 @@ The authors would like to thank...
 % (used to reserve space for the reference number labels box)
 \begin{thebibliography}{1}
 
-\bibitem{IEEEhowto:kopka}
-H.~Kopka and P.~W. Daly, \emph{A Guide to \LaTeX}, 3rd~ed.\hskip 1em plus
-  0.5em minus 0.4em\relax Harlow, England: Addison-Wesley, 1999.
+\bibitem{convexity}
+  Simon Christoph Stein, Markus Schoeler, Jeremie Papon, Florentin Worgotter
+  \emph{Object Partitioning using Local Convexity}
+
+\bibitem{object}
+  Andrej Karpathy, Stephen Miller, Li Fei-Fei
+  \emph{Object Discovery in 3D scenes via Shape Analysis}
 
 \end{thebibliography}
 
